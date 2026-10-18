@@ -1,0 +1,7 @@
+# Netlify package created while comparing hosting options.
+/netlify-upload/
+/notely-netlify-upload.zip
+
+# Local development / operating system files.
+.DS_Store
+Thumbs.db
