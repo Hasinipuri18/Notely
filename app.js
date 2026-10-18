@@ -50,6 +50,7 @@ const supabaseClient = window.supabase?.createClient && supabaseUrl && supabaseK
 
 let user = null;
 let authMode = 'login';
+let authRole = 'student';
 let authSubmitting = false;
 let authNotice = '';
 let backendSubjectByCode = new Map();
@@ -463,6 +464,16 @@ function renderAuth() {
           <p>${authMode === 'login' ? 'Sign in to find your course materials.' : 'Join your department’s shared notes library.'}</p>
           </div>
 
+          ${authMode === 'login' ? `
+            <div class="field">
+              <span class="field-label">Sign in as</span>
+              <div class="role-switch" role="group" aria-label="Choose account type">
+                <button type="button" data-auth-role="student" class="${authRole === 'student' ? 'active' : ''}" aria-pressed="${authRole === 'student'}">Student</button>
+                <button type="button" data-auth-role="faculty" class="${authRole === 'faculty' ? 'active' : ''}" aria-pressed="${authRole === 'faculty'}">Faculty</button>
+              </div>
+            </div>
+          ` : ''}
+
           ${authMode === 'signup' ? `
             <div class="field">
               <label for="username">Notely username</label>
@@ -512,6 +523,16 @@ function renderAuth() {
     authMode = event.target.dataset.mode;
     authNotice = '';
     renderAuth();
+  });
+  app.querySelectorAll('[data-auth-role]').forEach(button => {
+    button.addEventListener('click', () => {
+      authRole = button.dataset.authRole;
+      app.querySelectorAll('[data-auth-role]').forEach(option => {
+        const selected = option.dataset.authRole === authRole;
+        option.classList.toggle('active', selected);
+        option.setAttribute('aria-pressed', String(selected));
+      });
+    });
   });
   app.querySelector('.password-toggle').onclick = togglePassword;
   app.querySelector('#auth-form').onsubmit = authSubmit;
@@ -575,6 +596,12 @@ async function authSubmit(event) {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
       user = await loadProfile(data.user);
+      if (user.role !== authRole) {
+        const actualRole = user.role === 'faculty' ? 'Faculty' : 'Student';
+        await supabaseClient.auth.signOut();
+        user = null;
+        throw new Error(`This account is registered as ${actualRole}. Choose ${actualRole} to sign in.`);
+      }
     }
 
     try {

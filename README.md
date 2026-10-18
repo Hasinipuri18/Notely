@@ -5,6 +5,7 @@ Notely is a second-year department notes library for students and faculty. It or
 ## Features
 
 - Student and faculty accounts with email/password authentication through Supabase Auth
+- Separate student/faculty sign-in choice validated against each account's saved role
 - Student browsing and search by semester, section, and subject
 - Faculty uploads, search, edit, and confirmed deletion of notes
 - Student previews, downloads, saved notes, and recently viewed notes
