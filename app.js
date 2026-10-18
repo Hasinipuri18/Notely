@@ -410,7 +410,7 @@ async function loadBackendData() {
 async function loadProfile(authUser) {
   const { data, error } = await supabaseClient
     .from('profiles')
-    .select('id, username, display_name, role')
+    .select('id, username, display_name, role, requested_role')
     .eq('id', authUser.id)
     .single();
   if (error) throw error;
@@ -419,6 +419,7 @@ async function loadProfile(authUser) {
     username: data.username,
     email: authUser.email || '',
     role: data.role,
+    requestedRole: data.requested_role || data.role,
     facultyName: data.display_name || data.username
   };
 }
@@ -464,15 +465,13 @@ function renderAuth() {
           <p>${authMode === 'login' ? 'Sign in to find your course materials.' : 'Join your department’s shared notes library.'}</p>
           </div>
 
-          ${authMode === 'login' ? `
-            <div class="field">
-              <span class="field-label">Sign in as</span>
+          <div class="field">
+              <span class="field-label">${authMode === 'login' ? 'Sign in as' : 'Create account as'}</span>
               <div class="role-switch" role="group" aria-label="Choose account type">
                 <button type="button" data-auth-role="student" class="${authRole === 'student' ? 'active' : ''}" aria-pressed="${authRole === 'student'}">Student</button>
                 <button type="button" data-auth-role="faculty" class="${authRole === 'faculty' ? 'active' : ''}" aria-pressed="${authRole === 'faculty'}">Faculty</button>
               </div>
             </div>
-          ` : ''}
 
           ${authMode === 'signup' ? `
             <div class="field">
@@ -501,7 +500,9 @@ function renderAuth() {
             </div>
           </div>
 
-          ${authMode === 'signup' ? '<div class="notice">Student accounts can sign up here. Faculty access is enabled separately by the project owner.</div>' : ''}
+          ${authMode === 'signup' ? `<div class="notice signup-role-notice" data-signup-role-note>${authRole === 'faculty'
+            ? 'Faculty signups are recorded as access requests. The project owner must approve faculty access before upload tools are enabled.'
+            : 'Student accounts can sign up here. Faculty access requires approval by the project owner.'}</div>` : ''}
 
           <button class="button button-primary auth-submit" type="submit" data-auth-submit>
             <span>${authMode === 'login' ? 'Sign in to Notely' : 'Create account'}</span><span class="auth-submit-arrow" aria-hidden="true">↗</span>
@@ -532,6 +533,12 @@ function renderAuth() {
         option.classList.toggle('active', selected);
         option.setAttribute('aria-pressed', String(selected));
       });
+      const requestNote = app.querySelector('[data-signup-role-note]');
+      if (requestNote) {
+        requestNote.textContent = authRole === 'faculty'
+          ? 'Faculty signups are recorded as access requests. The project owner must approve faculty access before upload tools are enabled.'
+          : 'Student accounts can sign up here. Faculty access requires approval by the project owner.';
+      }
     });
   });
   app.querySelector('.password-toggle').onclick = togglePassword;
@@ -564,6 +571,7 @@ async function authSubmit(event) {
   setAuthButtonState('loading');
 
   const form = new FormData(event.currentTarget);
+  const requestedRole = authMode === 'signup' ? authRole : null;
   const email = String(form.get('email') || '').trim().toLowerCase();
   const password = String(form.get('password'));
 
@@ -579,28 +587,43 @@ async function authSubmit(event) {
       const { data, error } = await supabaseClient.auth.signUp({
         email,
         password,
-        options: { data: { username, display_name: username } }
+        options: { data: { username, display_name: username, requested_role: requestedRole } }
       });
       if (error) throw error;
 
       if (!data.session) {
         authSubmitting = false;
         authMode = 'login';
-        authNotice = `Check ${email} for the confirmation link, then sign in with your email and password.`;
+        authNotice = requestedRole === 'faculty'
+          ? `Check ${email} for the confirmation link. Your faculty access request is recorded; the project owner must approve it before you can use faculty tools.`
+          : `Check ${email} for the confirmation link, then sign in with your email and password.`;
         renderAuth();
         return;
       }
 
       user = await loadProfile(data.user);
+      if (requestedRole === 'faculty' && user.role !== 'faculty') {
+        await supabaseClient.auth.signOut();
+        user = null;
+        authSubmitting = false;
+        authMode = 'login';
+        authRole = 'faculty';
+        authNotice = 'Your faculty account request is recorded. The project owner must approve it before you can use faculty tools.';
+        renderAuth();
+        return;
+      }
     } else {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
       user = await loadProfile(data.user);
       if (user.role !== authRole) {
         const actualRole = user.role === 'faculty' ? 'Faculty' : 'Student';
+        const pendingFacultyRequest = authRole === 'faculty' && user.requestedRole === 'faculty';
         await supabaseClient.auth.signOut();
         user = null;
-        throw new Error(`This account is registered as ${actualRole}. Choose ${actualRole} to sign in.`);
+        throw new Error(pendingFacultyRequest
+          ? 'Your faculty request is awaiting approval. Please sign in as Student until the project owner approves it.'
+          : `This account is registered as ${actualRole}. Choose ${actualRole} to sign in.`);
       }
     }
 

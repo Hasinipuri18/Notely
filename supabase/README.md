@@ -17,15 +17,15 @@ The browser app loads the Supabase JavaScript client and `supabase-config.js`. E
 
 Because the initial schema was already run, also run `migrations/002_add_uploader_name.sql` once in SQL Editor. This adds the faculty display name stored with each upload. Do not rerun the full schema; it creates policies and triggers that are intended to be installed once.
 
-Notely signup asks for a username, email, and password. Supabase Auth verifies the email/password; the profile trigger stores the username in `profiles`. If email confirmation is enabled, users must confirm their address before signing in. New accounts receive the student role. The project owner must promote verified faculty accounts in the dashboard.
+Notely signup asks for a username, email, password, and whether the account is for a student or faculty member. Supabase Auth verifies the email/password; the profile trigger stores the username and requested role in `profiles`. Every new account still receives the student role. A faculty signup is recorded as a request, and the project owner must verify and promote that account in the dashboard before faculty tools are available.
 
 The existing browser-only accounts, notes, and files are not automatically migrated. The current app connects new account sign-in, notes, file uploads, saved notes, recently viewed history, and reminders to Supabase. Old testing accounts and uploads remain in the browser and will not appear in the backend library.
 
 ## Finish local setup
 
 1. In Supabase, open **Connect** and copy the project's **publishable key** (often starts with `sb_publishable_`). Put it in `supabase-config.js` in place of `PASTE_YOUR_PUBLISHABLE_KEY_HERE`. The project URL is already filled in. Do not use or share a secret/service-role key.
-2. In **SQL Editor**, run `migrations/002_add_uploader_name.sql` once, since the original schema was already applied.
+2. In **SQL Editor**, run `migrations/002_add_uploader_name.sql` and `migrations/003_faculty_signup_requests.sql` once each, since the original schema was already applied.
 3. Serve the site over local HTTP (for example, VS Code Live Server) instead of opening `index.html` as a `file://` URL. Set Supabase **Authentication → URL Configuration → Site URL** to that local address while testing (for example, `http://localhost:5500`). If email confirmation is enabled, make sure that local address is also an allowed redirect URL.
-4. Create a student account with a username, email, and password. Sign-in uses email and password; the username is the name shown inside Notely. New accounts are students by default. To test faculty tools, promote the intended account to `faculty` in the `profiles` table after it has registered.
+4. Create an account with a username, email, password, and account type. Sign-in uses email and password; the username is the name shown inside Notely. A faculty request appears as `requested_role = 'faculty'` in `profiles`; verify that person, then change `role` to `faculty` to enable faculty tools.
 
 Email is used by Supabase Auth to verify the account and handle password sign-in. Notely does not display the email in the notes library. Email confirmation behavior is controlled by the project's Supabase Auth settings.

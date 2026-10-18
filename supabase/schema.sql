@@ -5,6 +5,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null check (username ~ '^[A-Za-z0-9._-]{3,32}$'),
   display_name text not null default '',
+  requested_role text not null default 'student' check (requested_role in ('student', 'faculty')),
   role text not null default 'student' check (role in ('student', 'faculty')),
   created_at timestamptz not null default now()
 );
@@ -127,8 +128,8 @@ create table if not exists public.reminder_sections (
   primary key (reminder_id, section_id)
 );
 
--- New signups are always students. A project owner promotes faculty accounts
--- manually in the Supabase dashboard after verifying the faculty member.
+-- Requested faculty access is recorded, but new accounts remain students until
+-- the project owner approves and promotes them in the Supabase dashboard.
 create or replace function public.create_profile_for_new_user()
 returns trigger
 language plpgsql
@@ -136,11 +137,12 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, username, display_name)
+  insert into public.profiles (id, username, display_name, requested_role)
   values (
     new.id,
     coalesce(nullif(new.raw_user_meta_data ->> 'username', ''), split_part(coalesce(new.email, new.phone, 'student'), '@', 1)),
-    coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''), '')
+    coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''), ''),
+    case when new.raw_user_meta_data ->> 'requested_role' = 'faculty' then 'faculty' else 'student' end
   );
   return new;
 end;
